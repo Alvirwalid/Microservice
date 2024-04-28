@@ -25,6 +25,7 @@ public class UserController {
 
     @GetMapping("/{userId}")
     public ResponseEntity<BaseResponse>getSingleUser(@PathVariable String userId)  {
+        System.out.println("Uuuuuuuuuuuuu");
         return service.getUser(userId);
     }
 

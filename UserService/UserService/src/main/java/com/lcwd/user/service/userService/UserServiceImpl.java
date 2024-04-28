@@ -1,26 +1,26 @@
 package com.lcwd.user.service.userService;
-
-import com.lcwd.user.service.constant.BaseConstant;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ser.std.StdKeySerializers;
+import com.lcwd.user.service.entity.Rating.Hotel;
 import com.lcwd.user.service.entity.Rating.Rating;
 import com.lcwd.user.service.entity.User;
 import com.lcwd.user.service.userRepository.UserRepository;
 import com.lcwd.user.service.utils.BaseResponse;
 import com.lcwd.user.service.utils.UserUtils;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.client.RestTemplate;
-
 import java.util.*;
+import java.util.stream.Collectors;
+
+import static reactor.core.publisher.Operators.as;
 
 @Service
 @AllArgsConstructor
@@ -69,15 +69,34 @@ public class UserServiceImpl implements  UserService{
 
     @Override
     public ResponseEntity<BaseResponse> getUser(String userId) {
+
        try {
+
            Optional<User> user = Optional.ofNullable(repository.findById(userId).get());
+
+
            if(user.isPresent()){
 
-               String forObject = restTemplate.getForObject("http://localhost:8080/ratings/user/a2bf0d25-391a-4632-aa37-96927642becf", String.class);
+               ObjectMapper mapper = new ObjectMapper();
+               JsonNode baseResponse = restTemplate.getForObject("http://RATING-SERIVE/ratings/user/"+user.get().getUserId(), JsonNode.class);
+               BaseResponse ratingResponse=mapper.convertValue(baseResponse, new TypeReference<BaseResponse>() { });
 
-               System.out.println(forObject);
-//               ArrayList forObject= restTemplate.getForObject("http://localhost:8080/ratings/user/a2bf0d25-391a-4632-aa37-96927642becf",ArrayList.class );
-//               logger.info("info",forObject);
+               List<Rating>ratings= (List<Rating>) ratingResponse.getData();
+
+               ObjectMapper ratingMapper = new ObjectMapper();
+               List<Rating> pojos = ratingMapper.convertValue(ratingResponse.getData(), new TypeReference<List<Rating>>() { });
+
+               List<Boolean> booleans  =    pojos.stream().map(element->{
+                   BaseResponse hotelsByIdRes = restTemplate.getForObject("http://HOTEL-SERVICE/hotels/"+element.getHotelId(), BaseResponse.class);
+                   ObjectMapper hotelMapper = new ObjectMapper();
+                   Hotel hotel =hotelMapper.convertValue(hotelsByIdRes.getData(), new TypeReference<Hotel>() {});
+                   element.setHotel(hotel);
+                   return element.getHotelId().equals("");
+               }).collect(Collectors.toList());
+
+
+               System.out.println(pojos);
+              user.get().setRatings(pojos);
                return new ResponseEntity<>(utils.generateSuccessResponse(user,"",""),HttpStatus.OK);
            }else {
 
@@ -86,6 +105,7 @@ public class UserServiceImpl implements  UserService{
            }
 
        }catch (Exception e){
+           e.printStackTrace();
            return  new ResponseEntity<>(utils.generateErrorResponse(e),HttpStatus.INTERNAL_SERVER_ERROR);
 
        }
